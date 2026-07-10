@@ -19,8 +19,8 @@ concurrency:
 
 jobs:
   publish-docs:
-    # Only publish from the modelcontextprotocol/csharp-sdk repository
-    if: ${{ github.repository == 'modelcontextprotocol/csharp-sdk' }}
+    # TEMPORARY: repo guard removed to test docs publishing in the docs-testing
+    # fork (jeffhandley/mcp-csharp-sdk-docs). Restore before merging.
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
