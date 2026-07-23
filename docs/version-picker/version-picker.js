@@ -34,10 +34,26 @@ export function stripVersionPrefix(pathname, base, currentSlug) {
   return "";
 }
 
+// Derive the deployment base from the page URL. This keeps picker navigation
+// within project Pages sites, whose content is hosted below "/<repository>/".
+export function getBasePath(cfg, pathname) {
+  const marker = `/${cfg.version}/`;
+  const markerIndex = pathname.indexOf(marker);
+  if (markerIndex !== -1) return pathname.slice(0, markerIndex + 1) || "/";
+
+  const bareMarker = `/${cfg.version}`;
+  if (pathname.endsWith(bareMarker)) {
+    return pathname.slice(0, -bareMarker.length + 1) || "/";
+  }
+
+  return cfg.base || "/";
+}
+
 // Compute the equivalent path in another version, preserving the sub-page.
 export function targetPath(cfg, targetSlug, pathname) {
-  const sub = stripVersionPrefix(pathname, cfg.base || "/", cfg.version);
-  return joinPath(joinPath(cfg.base || "/", targetSlug), sub);
+  const base = getBasePath(cfg, pathname);
+  const sub = stripVersionPrefix(pathname, base, cfg.version);
+  return joinPath(joinPath(base, targetSlug), sub);
 }
 
 function h(tag, attrs, children) {
@@ -52,13 +68,13 @@ function h(tag, attrs, children) {
   return el;
 }
 
-function versionRoot(cfg, slug) {
-  return joinPath(joinPath(cfg.base || "/", slug), "");
+function versionRoot(cfg, slug, pathname) {
+  return joinPath(joinPath(getBasePath(cfg, pathname), slug), "");
 }
 
 async function navigate(cfg, slug) {
   const candidate = targetPath(cfg, slug, location.pathname);
-  const home = versionRoot(cfg, slug);
+  const home = versionRoot(cfg, slug, location.pathname);
   // Best effort: keep the reader on the same page if it exists in the target
   // version; otherwise fall back to that version's landing page.
   try {

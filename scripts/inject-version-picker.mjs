@@ -6,7 +6,8 @@
 // <siteDir> is a single version's built output (e.g. combined/2.0).
 // <slug>    is that version's slug (must match an entry in docs-versions.json).
 // The widget config is derived from docs-versions.json and written into each page's
-// <head> as `window.__DOCS__`, followed by the picker's CSS + JS from <base>/assets.
+// <head>. The picker assets are referenced relative to each generated page so they
+// work from both a custom domain and a project Pages subpath.
 
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -70,16 +71,11 @@ async function main() {
     })),
   };
 
-  const assetBase = base + "assets/";
   const json = JSON.stringify(config).replace(/</g, "\\u003c");
-  const snippet =
-    `\n${MARKER}\n` +
-    `<script>window.__DOCS__=${json};</script>\n` +
-    `<link rel="stylesheet" href="${assetBase}version-picker.css">\n` +
-    `<script type="module" src="${assetBase}version-picker.js"></script>\n`;
 
   let injected = 0;
   let skipped = 0;
+  const assetsDir = path.resolve(siteDir, "..", "assets");
   for await (const file of htmlFiles(siteDir)) {
     const html = await readFile(file, "utf8");
     if (html.includes(MARKER)) {
@@ -91,6 +87,12 @@ async function main() {
       skipped++;
       continue;
     }
+    const assetBase = path.relative(path.dirname(file), assetsDir).split(path.sep).join("/") + "/";
+    const snippet =
+      `\n${MARKER}\n` +
+      `<script>window.__DOCS__=${json};</script>\n` +
+      `<link rel="stylesheet" href="${assetBase}version-picker.css">\n` +
+      `<script type="module" src="${assetBase}version-picker.js"></script>\n`;
     await writeFile(file, html.slice(0, idx) + snippet + html.slice(idx));
     injected++;
   }
