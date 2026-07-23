@@ -59,6 +59,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 0.35rem;
   min-height: 2.5rem;
   padding: 0.4rem 1rem;
   color: #24292f;
@@ -66,12 +67,6 @@
   border-bottom: 1px solid #eac54f;
   font-size: 0.9rem;
   text-align: center;
-}
-
-.dv-prerelease-banner a {
-  margin-left: 0.25rem;
-  color: #0969da;
-  font-weight: 600;
 }
 
 /* Inline in the navbar (preferred placement). */
@@ -104,8 +99,4 @@
   color: #e6edf3;
   background: #3d2e00;
   border-color: #9a6700;
-}
-
-[data-bs-theme="dark"] .dv-prerelease-banner a {
-  color: #58a6ff;
 }

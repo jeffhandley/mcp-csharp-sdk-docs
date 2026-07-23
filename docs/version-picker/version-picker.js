@@ -89,6 +89,10 @@ async function navigate(cfg, slug) {
   location.assign(home);
 }
 
+function previewBadge() {
+  return h("span", { class: "dv-picker__badge" }, ["preview"]);
+}
+
 function buildPicker(cfg) {
   const current = cfg.versions.find((v) => v.slug === cfg.version);
 
@@ -105,26 +109,19 @@ function buildPicker(cfg) {
 
   const children = [h("span", { class: "dv-picker__label" }, ["Version"]), select];
   if (current && current.prerelease) {
-    children.push(h("span", { class: "dv-picker__badge" }, ["preview"]));
+    children.push(previewBadge());
   }
   return h("div", { class: "dv-picker" }, children);
 }
 
-function buildPrereleaseBanner(cfg, current) {
-  const stable = cfg.versions.find((v) => !v.prerelease);
-  if (!stable) return null;
-
-  const link = h("a", {
-    href: versionRoot(cfg, stable.slug, location.pathname),
-  }, ["here"]);
-
+function buildPrereleaseBanner() {
   return h("div", {
     class: "dv-prerelease-banner",
     role: "status",
   }, [
-    `You are currently viewing the docs for ${current.label || current.slug} (pre-release) version of the docs. To view ${stable.label || stable.slug}, click `,
-    link,
-    ".",
+    "You are currently viewing",
+    previewBadge(),
+    "documentation.",
   ]);
 }
 
@@ -146,10 +143,8 @@ function init() {
 
   const current = cfg.versions.find((v) => v.slug === cfg.version);
   if (!current) return;
-
   if (current.prerelease) {
-    const banner = buildPrereleaseBanner(cfg, current);
-    if (banner) document.body.prepend(banner);
+    document.body.prepend(buildPrereleaseBanner());
   }
 
   mount(buildPicker(cfg));
