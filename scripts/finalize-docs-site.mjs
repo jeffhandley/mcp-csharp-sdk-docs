@@ -2,11 +2,12 @@
 //   * copy the picker assets to <combinedDir>/assets/
 //   * publish a cleaned docs-versions.json at the site root
 //   * write a root index.html that redirects to the default version
+//   * generate unversioned redirect pages for the deployed v1 documentation
 //
 // Usage:
 //   node scripts/finalize-docs-site.mjs <combinedDir> [--versions <path>]
 
-import { readFile, writeFile, mkdir, copyFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, copyFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { manifestPath } from "./manifest-path.mjs";
 
@@ -25,6 +26,63 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
+}
+
+async function* htmlFiles(dir) {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) yield* htmlFiles(full);
+    else if (entry.isFile() && /\.html?$/i.test(entry.name)) yield full;
+  }
+}
+
+function redirectPage(target, title) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<meta http-equiv="refresh" content="0; url=${escapeHtml(target)}">
+<link rel="canonical" href="${escapeHtml(target)}">
+<script>location.replace(${JSON.stringify(target)} + location.search + location.hash);</script>
+</head>
+<body>
+<p>Redirecting to <a href="${escapeHtml(target)}">${escapeHtml(title)}</a>&hellip;</p>
+</body>
+</html>
+`;
+}
+
+async function generateV1Redirects(combinedDir) {
+  const v1Dir = path.join(combinedDir, "v1");
+  const redirects = new Map();
+
+  for await (const sourceFile of htmlFiles(v1Dir)) {
+    const relativePath = path.relative(v1Dir, sourceFile).split(path.sep).join("/");
+    if (relativePath === "index.html") continue;
+
+    redirects.set(relativePath, `v1/${relativePath}`);
+  }
+
+  const publicMap = {};
+  const redirectEntries = [...redirects].sort(([left], [right]) => left.localeCompare(right));
+  for (const [sourcePath, targetPath] of redirectEntries) {
+    const destination = path.join(combinedDir, sourcePath);
+    const relativeTarget = path.relative(path.dirname(destination), path.join(combinedDir, targetPath))
+      .split(path.sep)
+      .join("/");
+
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(destination, redirectPage(relativeTarget, "MCP C# SDK documentation"));
+    publicMap[`/${sourcePath}`] = `/${targetPath}`;
+  }
+
+  await writeFile(
+    path.join(combinedDir, "v1-redirects.json"),
+    JSON.stringify(publicMap, null, 2) + "\n"
+  );
+
+  return redirects.size;
 }
 
 async function main() {
@@ -65,23 +123,13 @@ async function main() {
   // 3. Root redirect to the default version (relative -> works under any base).
   const def = manifest.default;
   const target = `./${def}/`;
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>MCP C# SDK documentation</title>
-<meta http-equiv="refresh" content="0; url=${escapeHtml(target)}">
-<link rel="canonical" href="${escapeHtml(target)}">
-<script>location.replace(${JSON.stringify(target)} + (location.hash || ""));</script>
-</head>
-<body>
-<p>Redirecting to the <a href="${escapeHtml(target)}">MCP C# SDK documentation</a>&hellip;</p>
-</body>
-</html>
-`;
-  await writeFile(path.join(combinedDir, "index.html"), html);
+  await writeFile(
+    path.join(combinedDir, "index.html"),
+    redirectPage(target, "MCP C# SDK documentation")
+  );
 
-  console.log(`[finalize] assets + docs-versions.json written; root redirects to ${target}`);
+  const redirectCount = await generateV1Redirects(combinedDir);
+  console.log(`[finalize] assets + docs-versions.json written; root redirects to ${target}; ${redirectCount} v1 redirects written`);
 }
 
 main().catch((err) => {
