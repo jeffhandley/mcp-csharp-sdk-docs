@@ -55,7 +55,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       # For every major version >= 1, take the most recently published (by date)
       # non-draft release tagged v{major}.*. The vN prefix becomes the URL slug;
-      # the site root redirects to the newest line that has a stable release.
+      # the site root redirects to the newest release, including prereleases.
       run: |
         set -euo pipefail
         gh release list --repo "${{ github.repository }}" --limit 200 \
@@ -70,7 +70,7 @@ jobs:
             | group_by(.slug)
             | map(max_by(.published))
             | sort_by(.published) | reverse
-            | { default: ( ( [ .[] | select(.prerelease | not) ][0] ) // .[0] ).slug,
+            | { default: .[0].slug,
                 versions: map({ slug, ref, label, prerelease }) }
           ' | tee "$RUNNER_TEMP/docs-versions.json"
 
