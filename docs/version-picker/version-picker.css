@@ -92,33 +92,12 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 
-/* Dark mode: honor both the OS preference and DocFX modern's Bootstrap theme. */
-@media (prefers-color-scheme: dark) {
-  .dv-picker {
-    --dv-fg: #e6edf3;
-    --dv-bg: #161b22;
-    --dv-border: #30363d;
-    --dv-accent: #4493f8;
-  }
-}
-
+/* DocFX's explicit Bootstrap theme controls the widget appearance. */
 [data-bs-theme="dark"] .dv-picker {
   --dv-fg: #e6edf3;
   --dv-bg: #161b22;
   --dv-border: #30363d;
   --dv-accent: #4493f8;
-}
-
-@media (prefers-color-scheme: dark) {
-  .dv-prerelease-banner {
-    color: #e6edf3;
-    background: #3d2e00;
-    border-color: #9a6700;
-  }
-
-  .dv-prerelease-banner a {
-    color: #58a6ff;
-  }
 }
 
 [data-bs-theme="dark"] .dv-prerelease-banner {

@@ -10,6 +10,7 @@
 // work from both a custom domain and a project Pages subpath.
 
 import { readFile, writeFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { manifestPath } from "./manifest-path.mjs";
 
@@ -39,6 +40,11 @@ async function* htmlFiles(dir) {
     if (entry.isDirectory()) yield* htmlFiles(full);
     else if (entry.isFile() && /\.html?$/i.test(entry.name)) yield full;
   }
+}
+
+async function assetRevision(name) {
+  const contents = await readFile(new URL(`../docs/version-picker/${name}`, import.meta.url));
+  return createHash("sha256").update(contents).digest("hex").slice(0, 12);
 }
 
 async function main() {
@@ -72,6 +78,10 @@ async function main() {
   };
 
   const json = JSON.stringify(config).replace(/</g, "\\u003c");
+  const [cssRevision, jsRevision] = await Promise.all([
+    assetRevision("version-picker.css"),
+    assetRevision("version-picker.js"),
+  ]);
 
   let injected = 0;
   let skipped = 0;
@@ -91,8 +101,8 @@ async function main() {
     const snippet =
       `\n${MARKER}\n` +
       `<script>window.__DOCS__=${json};</script>\n` +
-      `<link rel="stylesheet" href="${assetBase}version-picker.css">\n` +
-      `<script type="module" src="${assetBase}version-picker.js"></script>\n`;
+      `<link rel="stylesheet" href="${assetBase}version-picker.css?v=${cssRevision}">\n` +
+      `<script type="module" src="${assetBase}version-picker.js?v=${jsRevision}"></script>\n`;
     await writeFile(file, html.slice(0, idx) + snippet + html.slice(idx));
     injected++;
   }
