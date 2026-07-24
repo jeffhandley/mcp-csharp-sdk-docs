@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       docs_ref:
-        description: Branch, tag, or commit whose docs should refresh its matching major version
+        description: Comma- or newline-separated branches, tags, or commits whose docs should refresh their matching major versions
         required: false
         type: string
 
@@ -93,32 +93,48 @@ jobs:
 
         # Orchestration (discovered docs-versions.json, scripts, picker assets)
         # always comes from THIS branch. Normally each version's HTML is produced
-        # by its release tag. A manual docs_ref replaces the matching major's
-        # HTML with content built from that ref, allowing content-only refreshes
+        # by its release tag. Manual docs_ref entries replace the matching major's
+        # HTML with content built from those refs, allowing content-only refreshes
         # without minting a product release.
         git fetch --tags --force origin
         CONTENT_REF="${CONTENT_REF:-}"
-        CONTENT_WORKTREE=""
-        CONTENT_SLUG=""
+        declare -A CONTENT_REFS_BY_SLUG=()
+        declare -A CONTENT_WORKTREES_BY_SLUG=()
+        CONTENT_INDEX=0
         if [[ -n "$CONTENT_REF" ]]; then
-          CONTENT_WORKTREE="$ROOT/../work-content"
-          git worktree add --force --detach "$CONTENT_WORKTREE" "$CONTENT_REF"
-          CONTENT_SLUG="$(node "$ROOT/scripts/get-docs-version-slug.mjs" "$CONTENT_WORKTREE/src/Directory.Build.props")"
-          if ! node "$ROOT/scripts/list-versions.mjs" | cut -f1 | grep -Fxq "$CONTENT_SLUG"; then
-            echo "::error::The docs ref '$CONTENT_REF' has major '$CONTENT_SLUG', which has no published release."
-            exit 1
-          fi
-          echo "Refreshing $CONTENT_SLUG docs from $CONTENT_REF"
+          while IFS= read -r raw_ref; do
+            ref="$(printf '%s' "$raw_ref" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            [[ -z "$ref" ]] && continue
+
+            CONTENT_INDEX=$((CONTENT_INDEX + 1))
+            content_worktree="$ROOT/../work-content-$CONTENT_INDEX"
+            git worktree add --force --detach "$content_worktree" "$ref"
+            content_slug="$(node "$ROOT/scripts/get-docs-version-slug.mjs" "$content_worktree/src/Directory.Build.props")"
+            if ! node "$ROOT/scripts/list-versions.mjs" | cut -f1 | grep -Fxq "$content_slug"; then
+              echo "::error::The docs ref '$ref' has major '$content_slug', which has no published release."
+              exit 1
+            fi
+            if [[ -v "CONTENT_REFS_BY_SLUG[$content_slug]" ]]; then
+              echo "::error::Multiple docs refs resolve to '$content_slug'."
+              exit 1
+            fi
+
+            CONTENT_REFS_BY_SLUG["$content_slug"]="$ref"
+            CONTENT_WORKTREES_BY_SLUG["$content_slug"]="$content_worktree"
+            echo "Refreshing $content_slug docs from $ref"
+          done < <(printf '%s\n' "$CONTENT_REF" | tr ',' '\n')
         fi
 
         while IFS=$'\t' read -r slug ref; do
-          if [[ "$slug" == "$CONTENT_SLUG" ]]; then
-            echo "::group::Build $slug (from ref $CONTENT_REF)"
-            wt="$CONTENT_WORKTREE"
+          if [[ -v "CONTENT_WORKTREES_BY_SLUG[$slug]" ]]; then
+            echo "::group::Build $slug (from ref ${CONTENT_REFS_BY_SLUG[$slug]})"
+            wt="${CONTENT_WORKTREES_BY_SLUG[$slug]}"
+            remove_worktree=false
           else
             echo "::group::Build $slug (from tag $ref)"
             wt="$ROOT/../work-$slug"
             git worktree add --force --detach "$wt" "refs/tags/$ref"
+            remove_worktree=true
           fi
 
           make -C "$wt" generate-docs
@@ -127,15 +143,15 @@ jobs:
           cp -a "$wt/artifacts/_site/." "$COMBINED/$slug/"
           node "$ROOT/scripts/inject-version-picker.mjs" "$COMBINED/$slug" "$slug" --base /
 
-          if [[ "$wt" != "$CONTENT_WORKTREE" ]]; then
+          if [[ "$remove_worktree" == true ]]; then
             git worktree remove --force "$wt"
           fi
           echo "::endgroup::"
         done < <(node "$ROOT/scripts/list-versions.mjs")
 
-        if [[ -n "$CONTENT_WORKTREE" ]]; then
-          git worktree remove --force "$CONTENT_WORKTREE"
-        fi
+        for wt in "${CONTENT_WORKTREES_BY_SLUG[@]}"; do
+          git worktree remove --force "$wt"
+        done
 
         node "$ROOT/scripts/finalize-docs-site.mjs" "$COMBINED"
 
