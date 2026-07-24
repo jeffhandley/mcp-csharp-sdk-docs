@@ -96,7 +96,7 @@ jobs:
         # by its release tag. Manual docs_ref entries replace the matching major's
         # HTML with content built from those refs, allowing content-only refreshes
         # without minting a product release.
-        git fetch --tags --force origin
+        git fetch --tags --force origin '+refs/heads/*:refs/remotes/origin/*'
         CONTENT_REF="${CONTENT_REF:-}"
         declare -A CONTENT_REFS_BY_SLUG=()
         declare -A CONTENT_WORKTREES_BY_SLUG=()
@@ -108,7 +108,11 @@ jobs:
 
             CONTENT_INDEX=$((CONTENT_INDEX + 1))
             content_worktree="$ROOT/../work-content-$CONTENT_INDEX"
-            git worktree add --force --detach "$content_worktree" "$ref"
+            resolved_ref="$ref"
+            if ! git rev-parse --verify --quiet "$resolved_ref^{commit}" > /dev/null; then
+              resolved_ref="origin/$ref"
+            fi
+            git worktree add --force --detach "$content_worktree" "$resolved_ref"
             content_slug="$(node "$ROOT/scripts/get-docs-version-slug.mjs" "$content_worktree/src/Directory.Build.props")"
             if ! node "$ROOT/scripts/list-versions.mjs" | cut -f1 | grep -Fxq "$content_slug"; then
               echo "::error::The docs ref '$ref' has major '$content_slug', which has no published release."
